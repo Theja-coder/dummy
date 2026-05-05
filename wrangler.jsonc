@@ -1,0 +1,95 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { DashboardLayout } from "@/components/DashboardLayout";
+import { useAuth } from "@/hooks/useAuth";
+import { useEffect, useMemo, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+export const Route = createFileRoute("/dashboard/my-attendance")({
+  head: () => ({ meta: [{ title: "My Attendance — Scholaris" }] }),
+  component: MyAttendance,
+});
+
+type Row = { id: string; date: string; status: string; courses: { code: string; name: string } | null };
+
+function MyAttendance() {
+  const { user } = useAuth();
+  const [rows, setRows] = useState<Row[]>([]);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const { data } = await supabase
+        .from("attendance")
+        .select("id, date, status, courses(code, name)")
+        .eq("student_id", user.id)
+        .order("date", { ascending: false });
+      setRows((data ?? []) as Row[]);
+    })();
+  }, [user]);
+
+  const stats = useMemo(() => {
+    const total = rows.length;
+    const present = rows.filter((r) => r.status === "present").length;
+    return { total, present, pct: total ? Math.round((present / total) * 100) : 0 };
+  }, [rows]);
+
+  return (
+    <DashboardLayout>
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold tracking-tight">My Attendance</h1>
+        <p className="text-muted-foreground mt-1">
+          {stats.present} of {stats.total} classes attended ·{" "}
+          <span className="font-semibold text-foreground">{stats.pct}%</span>
+        </p>
+      </div>
+      <div className="rounded-2xl border border-border bg-card shadow-elegant overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Course</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                  No attendance records yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.date}</TableCell>
+                  <TableCell>
+                    {r.courses ? `${r.courses.code} — ${r.courses.name}` : "—"}
+                  </TableCell>
+                  <TableCell>
+                    <span
+                      className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium capitalize ${
+                        r.status === "present"
+                          ? "bg-accent/20 text-accent-foreground"
+                          : "bg-destructive/15 text-destructive"
+                      }`}
+                    >
+                      {r.status}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </DashboardLayout>
+  );
+}
